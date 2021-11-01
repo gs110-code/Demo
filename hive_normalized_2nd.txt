@@ -1,0 +1,40 @@
+#!/bi/bash
+# Getting list of file name from AWS S3 bucket then extracting the date values from filename
+
+loadingFileName=$(aws s3 ls s3://big-data-batch01/project/imdb/ |awk '{print $4}')
+echo $loadingFileName
+
+aws s3 sync s3://big-data-batch01/project/imdb/  s3://big-data-batch01/guri/project/
+
+
+hive <<!
+
+create database if not exists hive_normalized;
+use hive_normalized;
+
+create external table if not exists IMDB_normalized_external(
+sno string,title string,year string,kind string,
+genre array<string> ,rating string,vote string,country array<string>,
+language string,runtime string,casts string,director string,
+composer string,writer string,runtimes string)
+partitioned by (fileDate string)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+stored as textfile
+location 's3://big-data-batch01/guri/external_table_normalized/'
+tblproperties("skip.header.line.count"="1");
+
+
+!
+
+
+for i in $loadingFileName
+do
+echo $i
+
+partitionField=$(echo $i | grep -Eo [0-9]{4}+_+[0-9]{2}+_+[0-9]{2} | sed 's/_/-/g');
+echo $partitionField
+
+hive --hiveconf partitionDate=$partitionField -f /home/hadoop/loadData.hql
+
+done
+
